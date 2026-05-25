@@ -531,8 +531,6 @@ function buildShareImage() {
   return c;
 }
 
-const escapeHtml = (s) => s.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-
 function die() {
   if (state.dead) return;
   state.dead = true;
@@ -541,9 +539,17 @@ function die() {
   const c = buildShareImage();
   const dataUrl = c.toDataURL('image/png');
   shotImg.src = dataUrl;
-  shareText = `I skied ${Math.floor(state.distance)} m! 🎿 Play at ${APP_URL}`;
-  // Caption + image inline; a rich text field (Messages, Mail, …) pastes both.
-  shareHtml = `<p>${escapeHtml(shareText)}</p><img src="${dataUrl}" alt="ski run" />`;
+  const m = Math.floor(state.distance);
+  shareText = `I skied ${m} m! 🎿 Play at ${APP_URL}`;
+  // Caption (with a clickable link) + image inline. Pasting the text/html
+  // flavor into a rich field brings BOTH; we deliberately do NOT add a bare
+  // image/png flavor, which macOS/Messages prefers and pastes alone (dropping
+  // the text). escapeHtml guards the caption; the URL is our own constant.
+  const linkText = APP_URL.replace(/^https?:\/\//, '');
+  shareHtml =
+    `<p style="font:600 15px ui-monospace,Menlo,monospace">` +
+    `I skied ${m} m! 🎿 Play at <a href="${APP_URL}">${linkText}</a></p>` +
+    `<img src="${dataUrl}" alt="ski run" style="max-width:100%;border-radius:8px" />`;
   shareFile = null;
   shareBlob = null;
   c.toBlob((blob) => {
@@ -558,15 +564,16 @@ function die() {
 // Copy the caption + image to the clipboard as one item (multiple flavors) so
 // a single paste drops both into a message. Returns true on success.
 function copyRunToClipboard() {
-  if (!shareBlob || !navigator.clipboard || !window.ClipboardItem) return false;
+  if (!navigator.clipboard || !window.ClipboardItem) return false;
   try {
+    // text/html carries the caption + image together; text/plain is the
+    // fallback for plain fields. No bare image/png — it would win and drop text.
     const item = new ClipboardItem({
       'text/html': new Blob([shareHtml], { type: 'text/html' }),
       'text/plain': new Blob([shareText], { type: 'text/plain' }),
-      'image/png': shareBlob,
     });
     navigator.clipboard.write([item]).then(
-      () => toast('Copied! Paste (⌘V) into a message.'),
+      () => toast('Copied image + link! Paste (⌘V) into a message.'),
       () => downloadRun(),
     );
     return true;
