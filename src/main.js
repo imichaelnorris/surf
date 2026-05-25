@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import GUI from 'lil-gui';
+import * as audio from './audio.js';
 
 // ---------------------------------------------------------------------------
 // Coordinate system
@@ -303,6 +304,7 @@ function clearField() {
 const keys = new Set();
 // Clicking the canvas drops focus off any GUI field so it can't eat arrow keys.
 canvas.addEventListener('pointerdown', () => {
+  audio.resume(); // a click anywhere on the slope also unlocks audio
   if (document.activeElement && document.activeElement !== document.body) {
     document.activeElement.blur();
   }
@@ -317,6 +319,7 @@ addEventListener('keydown', (e) => {
   if (jumpCodes.includes(e.code) && state.started && !state.airborne && !state.dead) {
     state.vy = CONFIG.jumpImpulse;
     state.airborne = true;
+    audio.jump();
   }
   if (handledCodes.includes(e.code)) e.preventDefault();
 });
@@ -355,6 +358,7 @@ function endTouch(e) {
   if (touch.active && !touch.moved && dur < 250 && state.started && !state.airborne && !state.dead) {
     state.vy = CONFIG.jumpImpulse;
     state.airborne = true;
+    audio.jump();
   }
   touch.active = false;
   touch.dx = touch.dy = 0;
@@ -409,9 +413,11 @@ function update(dt) {
     state.vy -= CONFIG.gravity * dt;
     state.y += state.vy * dt;
     if (state.y <= 0) {
+      const impact = Math.min(1, Math.abs(state.vy) / 22);
       state.y = 0;
       state.vy = 0;
       state.airborne = false;
+      audio.land(impact);
     }
   }
 
@@ -420,6 +426,9 @@ function update(dt) {
   if (!state.airborne) checkCollisions();
 
   state.distance = Math.max(state.distance, state.z);
+
+  // Drive the continuous skiing/wind sound from speed (and air state).
+  audio.updateMotion(state.speed, CONFIG.maxSpeed, state.airborne);
 }
 
 function checkCollisions() {
@@ -437,7 +446,9 @@ function checkCollisions() {
           if (o.userData.type === RAMP) {
             state.vy = CONFIG.rampImpulse;
             state.airborne = true;
+            audio.ramp();
           } else {
+            if (o.userData.type === ROCK) audio.hitRock(); else audio.hitTree();
             die();
           }
           return;
@@ -540,6 +551,7 @@ function buildShareImage() {
 function die() {
   if (state.dead) return;
   state.dead = true;
+  audio.die();
   document.body.classList.remove('playing');
   elFinal.textContent = `${Math.floor(state.distance)} m`;
   const c = buildShareImage();
@@ -603,6 +615,8 @@ function resetWorld() {
 
 function startRun() {
   resetWorld();
+  audio.resume();      // unlock audio on this user gesture
+  audio.setRunning(true);
   state.started = true;
   startEl.classList.remove('show');
   overlay.classList.remove('show');
@@ -611,6 +625,7 @@ function startRun() {
 
 function showStart() {
   resetWorld();
+  audio.setRunning(false);
   state.started = false;
   overlay.classList.remove('show');
   startEl.classList.add('show');
@@ -646,6 +661,7 @@ function toast(msg) {
   }
 })();
 addEventListener('keydown', (e) => {
+  if (e.code === 'KeyM') { toast(audio.toggleMute() ? '🔇 sound off' : '🔊 sound on'); return; }
   if (!state.started) {
     if (e.code === 'Enter' || e.code === 'Space') startRun();
   } else if (state.dead && (e.code === 'Enter' || e.code === 'KeyR')) {
