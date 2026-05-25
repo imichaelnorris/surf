@@ -1,0 +1,15 @@
+{
+  "name": "Ski",
+  "short_name": "Ski",
+  "description": "How far down the mountain can you get?",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#cfe8f5",
+  "theme_color": "#cfe8f5",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

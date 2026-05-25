@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#cfe8f5"/>
+  <ellipse cx="256" cy="486" rx="320" ry="120" fill="#f4fbff"/>
+  <rect y="392" width="512" height="120" fill="#f4fbff"/>
+  <!-- pine tree -->
+  <rect x="243" y="372" width="26" height="70" rx="4" fill="#6b4a2b"/>
+  <polygon points="256,96 168,300 344,300" fill="#2f7d4f"/>
+  <polygon points="256,188 186,372 326,372" fill="#37925f"/>
+</svg>

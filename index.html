@@ -3,9 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Tints Safari's status-bar / URL-bar chrome. Updated from JS: sky while
-         playing (blends with the scene), dim slate on the menu screens. -->
+    <!-- Tints Safari's status-bar / URL-bar chrome to the scene's sky. -->
     <meta name="theme-color" content="#cfe8f5" />
+    <!-- Standalone web-app: when added to the Home Screen it launches fullscreen
+         with NO Safari URL bar (the only way to actually hide it on iOS). -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- "default" = dark status-bar text on a light bar, which matches the
+         light sky (black-translucent would put white text over the light scene). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Ski" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <title>surf — ski prototype</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
