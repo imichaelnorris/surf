@@ -7,9 +7,10 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #cfe8f5; }
-      /* dvh tracks the *visible* viewport, so the canvas never runs behind the
-         iOS toolbar. JS only sets the drawing buffer; CSS owns the element size. */
-      #app { width: 100vw; height: 100dvh; display: block; touch-action: none; }
+      /* --vv-height is the live visible-viewport height (set from JS via the
+         visualViewport API); 100dvh is the pre-JS / non-iOS fallback. JS only
+         sets the drawing buffer; CSS owns the element size. */
+      #app { width: 100vw; height: var(--vv-height, 100dvh); display: block; touch-action: none; }
       #hud {
         position: fixed;
         top: calc(12px + env(safe-area-inset-top));
@@ -21,15 +22,16 @@
       #hud .big { font-size: 28px; }
       #help {
         position: fixed;
-        bottom: calc(12px + env(safe-area-inset-bottom));
+        bottom: calc(12px + max(var(--vv-bottom, 0px), env(safe-area-inset-bottom)));
         left: calc(12px + env(safe-area-inset-left));
         font: 500 12px/1.5 ui-monospace, Menlo, monospace;
         color: #2b5263; opacity: 0.8; pointer-events: none; user-select: none;
       }
       /* Game-over overlay — translucent so the wiped-out slope shows through. */
       #gameover {
-        position: fixed; inset: 0; display: none;
-        align-items: center; justify-content: center;
+        position: fixed; left: 0; right: 0;
+        top: var(--vv-top, 0px); height: var(--vv-height, 100dvh);
+        display: none; align-items: center; justify-content: center;
         background: rgba(24, 48, 64, 0.42);
         backdrop-filter: blur(2px);
         font-family: ui-monospace, Menlo, monospace; color: #fff;
@@ -63,8 +65,9 @@
       }
       /* Start screen — sits over the idle slope. */
       #start {
-        position: fixed; inset: 0; display: none;
-        align-items: center; justify-content: center;
+        position: fixed; left: 0; right: 0;
+        top: var(--vv-top, 0px); height: var(--vv-height, 100dvh);
+        display: none; align-items: center; justify-content: center;
         background: linear-gradient(180deg, rgba(18,42,58,0.55), rgba(18,42,58,0.80));
         backdrop-filter: blur(2px);
         font-family: ui-monospace, Menlo, monospace; color: #fff;
@@ -84,7 +87,8 @@
       #start button:active { transform: scale(0.97); }
       /* Toast confirmation */
       #toast {
-        position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
+        position: fixed; left: 50%;
+        bottom: calc(28px + max(var(--vv-bottom, 0px), env(safe-area-inset-bottom)));
         transform: translateX(-50%) translateY(10px);
         background: rgba(16, 32, 44, 0.92); color: #fff;
         font: 600 13px ui-monospace, Menlo, monospace;

@@ -708,10 +708,23 @@ gui.close();
 // Loop & resize
 // ---------------------------------------------------------------------------
 
+const root = document.documentElement;
+
 function resize() {
-  // Measure what CSS (100dvh) actually laid out, not innerHeight — on iOS the two
-  // disagree while the address bar is visible. `false` keeps CSS in charge of the
-  // element size so setSize only touches the drawing buffer.
+  // Publish the *visible* viewport to CSS so fixed UI can track it. On iOS,
+  // `position: fixed` anchors to the layout (large) viewport, so without this
+  // the bottom UI hides behind Safari's URL bar even though the canvas fits.
+  //   --vv-height : visible height           (overlays size to this)
+  //   --vv-top    : offset of the visible top (rarely non-zero)
+  //   --vv-bottom : height the bottom bar currently occupies
+  const vv = window.visualViewport;
+  if (vv) {
+    root.style.setProperty('--vv-height', vv.height + 'px');
+    root.style.setProperty('--vv-top', vv.offsetTop + 'px');
+    root.style.setProperty('--vv-bottom', Math.max(0, root.clientHeight - vv.height - vv.offsetTop) + 'px');
+  }
+  // Measure what CSS actually laid out, not innerHeight. `false` keeps CSS in
+  // charge of the element size so setSize only touches the drawing buffer.
   const w = canvas.clientWidth, h = canvas.clientHeight;
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
@@ -719,6 +732,7 @@ function resize() {
 }
 addEventListener('resize', resize);
 visualViewport?.addEventListener('resize', resize); // fires as the iOS toolbar slides
+visualViewport?.addEventListener('scroll', resize); // and as it scrolls in/out
 resize();
 
 showStart(); // populate the slope behind the start screen and wait for Play
