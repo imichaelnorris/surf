@@ -82,6 +82,17 @@
       }
       #start button:hover { transform: scale(1.05); }
       #start button:active { transform: scale(0.97); }
+      /* Toast confirmation */
+      #toast {
+        position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom));
+        transform: translateX(-50%) translateY(10px);
+        background: rgba(16, 32, 44, 0.92); color: #fff;
+        font: 600 13px ui-monospace, Menlo, monospace;
+        padding: 10px 18px; border-radius: 999px;
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease; z-index: 40;
+      }
+      #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     </style>
   </head>
   <body>
@@ -115,6 +126,7 @@
         </div>
       </div>
     </div>
+    <div id="toast"></div>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

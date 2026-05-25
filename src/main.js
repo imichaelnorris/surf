@@ -493,7 +493,14 @@ const overlay = document.getElementById('gameover');
 const elFinal = document.getElementById('final');
 const shotImg = document.getElementById('shot');
 
-let shareFile = null; // File holding the last-frame + score image, built on death
+const APP_URL = 'https://michaelnorris.com/ski';
+
+// Share payloads, all pre-built on death so the share/clipboard call at click
+// time stays synchronous (browsers require that for the user-gesture grant).
+let shareFile = null;  // PNG File for the native share sheet (mobile)
+let shareBlob = null;  // same image as a Blob (for clipboard image flavor)
+let shareText = '';    // caption with the link
+let shareHtml = '';    // rich HTML: caption + the image inline (data URL)
 
 // Copy the final rendered frame onto a 2D canvas and stamp the score on it.
 function buildShareImage() {
@@ -524,35 +531,68 @@ function buildShareImage() {
   return c;
 }
 
+const escapeHtml = (s) => s.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
+
 function die() {
   if (state.dead) return;
   state.dead = true;
   elFinal.textContent = `${Math.floor(state.distance)} m`;
   const c = buildShareImage();
-  shotImg.src = c.toDataURL('image/png');
-  // Pre-build the share File now so the share-button click can call
-  // navigator.share() synchronously (preserves the user-gesture requirement).
+  const dataUrl = c.toDataURL('image/png');
+  shotImg.src = dataUrl;
+  shareText = `I skied ${Math.floor(state.distance)} m! 🎿 Play at ${APP_URL}`;
+  // Caption + image inline; a rich text field (Messages, Mail, …) pastes both.
+  shareHtml = `<p>${escapeHtml(shareText)}</p><img src="${dataUrl}" alt="ski run" />`;
   shareFile = null;
+  shareBlob = null;
   c.toBlob((blob) => {
-    if (blob) shareFile = new File([blob], 'ski-run.png', { type: 'image/png' });
+    if (blob) {
+      shareBlob = blob;
+      shareFile = new File([blob], 'ski-run.png', { type: 'image/png' });
+    }
   }, 'image/png');
   overlay.classList.add('show');
 }
 
-function shareRun() {
-  if (!shareFile) return;
-  const text = `I skied ${Math.floor(state.distance)} m! 🎿`;
-  if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
-    navigator.share({ title: 'surf · ski', text, files: [shareFile] }).catch(() => {});
-    return;
+// Copy the caption + image to the clipboard as one item (multiple flavors) so
+// a single paste drops both into a message. Returns true on success.
+function copyRunToClipboard() {
+  if (!shareBlob || !navigator.clipboard || !window.ClipboardItem) return false;
+  try {
+    const item = new ClipboardItem({
+      'text/html': new Blob([shareHtml], { type: 'text/html' }),
+      'text/plain': new Blob([shareText], { type: 'text/plain' }),
+      'image/png': shareBlob,
+    });
+    navigator.clipboard.write([item]).then(
+      () => toast('Copied! Paste (⌘V) into a message.'),
+      () => downloadRun(),
+    );
+    return true;
+  } catch {
+    return false;
   }
-  // Desktop / unsupported fallback: download the image.
-  const url = URL.createObjectURL(shareFile);
+}
+
+function downloadRun() {
+  if (!shareBlob) return;
+  const url = URL.createObjectURL(shareBlob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'ski-run.png';
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function shareRun() {
+  if (!shareFile) return;
+  // Mobile: native share sheet (handles image + text together).
+  if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+    navigator.share({ title: 'surf · ski', text: shareText, url: APP_URL, files: [shareFile] }).catch(() => {});
+    return;
+  }
+  // Desktop: copy image + caption to the clipboard; download if that fails.
+  if (!copyRunToClipboard()) downloadRun();
 }
 
 function resetWorld() {
@@ -582,6 +622,31 @@ function showStart() {
 document.getElementById('play').addEventListener('click', startRun);
 document.getElementById('replay').addEventListener('click', startRun);
 document.getElementById('share').addEventListener('click', shareRun);
+
+// Brief confirmation toast (e.g. after copying to the clipboard).
+const toastEl = document.getElementById('toast');
+let toastTimer = null;
+function toast(msg) {
+  if (!toastEl) return;
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+}
+
+// Label the share button for what it actually does on this device: the native
+// share sheet (mobile), copy image+text (desktop), or a plain image download.
+(() => {
+  const btn = document.getElementById('share');
+  let canFileShare = false;
+  try {
+    canFileShare = !!(navigator.canShare &&
+      navigator.canShare({ files: [new File(['x'], 'x.png', { type: 'image/png' })] }));
+  } catch { /* canShare unsupported */ }
+  if (!canFileShare) {
+    btn.textContent = (navigator.clipboard && window.ClipboardItem) ? '⎘ Copy' : '⤓ Save image';
+  }
+})();
 addEventListener('keydown', (e) => {
   if (!state.started) {
     if (e.code === 'Enter' || e.code === 'Space') startRun();
