@@ -3,8 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Tints Safari's status-bar / URL-bar chrome to the scene's sky. -->
-    <meta name="theme-color" content="#cfe8f5" />
+    <!-- Tints Safari's bars to the snow ground (measured), so the prominent
+         bottom URL bar matches; the top status bar (over sky) is slightly off. -->
+    <meta name="theme-color" content="#d0d3d4" />
     <!-- Standalone web-app: when added to the Home Screen it launches fullscreen
          with NO Safari URL bar (the only way to actually hide it on iOS). -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -18,7 +19,7 @@
     <title>surf — ski prototype</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { width: 100%; height: 100%; overflow: hidden; background: #cfe8f5; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #d0d3d4; }
       /* Full-bleed scene: the canvas fills the whole screen (behind the status
          bar and Safari's URL bar) so there's no dead space. Only the UI insets
          to stay clear of the bars. JS sizes the drawing buffer to match. */

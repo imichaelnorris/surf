@@ -493,32 +493,12 @@ const overlay = document.getElementById('gameover');
 const elFinal = document.getElementById('final');
 const shotImg = document.getElementById('shot');
 
-// Safari shows one chrome color for both bars; the more prominent bottom URL
-// bar sits over the snow ground, so we match THAT (the top status bar, over the
-// sky, ends up slightly off instead). We sample the real ground color rather
-// than guess: scan a row near the screen bottom and take the brightest pixel
-// (open snow, not the darker skier/trees/rocks or the grid lines).
-const themeMeta = document.querySelector('meta[name="theme-color"]');
-function setChrome(color) {
-  themeMeta?.setAttribute('content', color);
-  document.body.style.background = color;
-}
-setChrome('#cfe8f5'); // sky fallback until the first ground sample lands
-
-const _pix = new Uint8Array(4);
-function sampleGroundColor() {
-  const gl = renderer.getContext();
-  const w = canvas.width, h = canvas.height;
-  if (!w || !h) return null;
-  let best = null, bestLum = -1;
-  for (let i = 1; i <= 7; i++) {
-    // readPixels origin is bottom-left, so y≈6 is just above the screen bottom.
-    gl.readPixels(((w * i) / 8) | 0, 6, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _pix);
-    const lum = _pix[0] * 0.299 + _pix[1] * 0.587 + _pix[2] * 0.114;
-    if (lum > bestLum) { bestLum = lum; best = [_pix[0], _pix[1], _pix[2]]; }
-  }
-  return best;
-}
+// Safari shows one chrome color for both bars. The more prominent bottom URL
+// bar sits over the snow ground, so we match that (the top status bar, over the
+// sky, is slightly off as a result). #d0d3d4 is the measured ground color; it's
+// set statically in the <meta name="theme-color"> in index.html. We avoid
+// sampling it at runtime because gl.readPixels on the preserved drawing buffer
+// is unreliable / stalls on iOS Safari.
 
 const APP_URL = 'https://michaelnorris.com/ski';
 
@@ -732,7 +712,6 @@ if (!TUNING) gui.hide();
 // ---------------------------------------------------------------------------
 
 const root = document.documentElement;
-let chromeReady = false; // re-armed on resize; sampled once the scene is drawn
 
 function resize() {
   // Publish the *visible* viewport to CSS so fixed UI can track it. On iOS,
@@ -753,7 +732,6 @@ function resize() {
   renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  chromeReady = false; // canvas changed size — re-sample the ground tint
 }
 addEventListener('resize', resize);
 visualViewport?.addEventListener('resize', resize); // fires as the iOS toolbar slides
@@ -763,20 +741,12 @@ resize();
 showStart(); // populate the slope behind the start screen and wait for Play
 
 let last = performance.now();
-let warmup = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   update(dt);
   render();
   updateHud();
-  // Once the scene has drawn a few frames, sample the ground color once and
-  // tint the chrome to it (cheap, then idle until the next resize).
-  if (!chromeReady && ++warmup > 3) {
-    const c = sampleGroundColor();
-    if (c) { setChrome(`rgb(${c[0]}, ${c[1]}, ${c[2]})`); chromeReady = true; }
-    warmup = 0;
-  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
