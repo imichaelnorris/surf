@@ -493,6 +493,16 @@ const overlay = document.getElementById('gameover');
 const elFinal = document.getElementById('final');
 const shotImg = document.getElementById('shot');
 
+// Drive Safari's chrome tint (and the body bg behind any safe-area gaps) so the
+// status/URL bars blend: sky while playing, a dim slate matching the menu dim.
+const SKY = '#cfe8f5';
+const MENU_DIM = '#5f757d';
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+function setChrome(color) {
+  if (themeMeta) themeMeta.setAttribute('content', color);
+  document.body.style.background = color;
+}
+
 const APP_URL = 'https://michaelnorris.com/ski';
 
 // Share payloads, all pre-built on death so the share/clipboard call at click
@@ -534,6 +544,7 @@ function die() {
   if (state.dead) return;
   state.dead = true;
   document.body.classList.remove('playing');
+  setChrome(MENU_DIM);
   elFinal.textContent = `${Math.floor(state.distance)} m`;
   const c = buildShareImage();
   const dataUrl = c.toDataURL('image/png');
@@ -600,6 +611,7 @@ function startRun() {
   startEl.classList.remove('show');
   overlay.classList.remove('show');
   document.body.classList.add('playing');
+  setChrome(SKY);
 }
 
 function showStart() {
@@ -608,6 +620,7 @@ function showStart() {
   overlay.classList.remove('show');
   startEl.classList.add('show');
   document.body.classList.remove('playing');
+  setChrome(MENU_DIM);
 }
 
 document.getElementById('play').addEventListener('click', startRun);
