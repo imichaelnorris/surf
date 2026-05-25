@@ -493,43 +493,13 @@ const overlay = document.getElementById('gameover');
 const elFinal = document.getElementById('final');
 const shotImg = document.getElementById('shot');
 
-// Drive Safari's chrome tint (status/URL bars) by SAMPLING the actual rendered
-// pixels at the top & bottom edges and compositing whatever overlay is showing
-// over them. Re-sampled on a loop so it tracks the moving scene and the menus —
-// a fixed guess looked "close but wrong", which reads worse than an honest gap.
-// These alphas/colors must match the overlay backgrounds in index.html.
-const START_OVERLAY = { r: 18, g: 42, b: 58, a: 0.62 };
-const GAMEOVER_OVERLAY = { r: 24, g: 48, b: 64, a: 0.42 };
+// The menu overlays are transparent and the scene is full-bleed in every state,
+// so Safari's chrome just needs to match the scene. The scene's sky/background
+// is exactly #cfe8f5, so we set theme-color (and the body bg behind any
+// safe-area gaps) to that once — a real match, not a guess.
 const themeMeta = document.querySelector('meta[name="theme-color"]');
-const _pix = new Uint8Array(4);
-
-function sampleScene(px, py) {
-  const gl = renderer.getContext();
-  gl.readPixels(px, py, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, _pix);
-  return [_pix[0], _pix[1], _pix[2]];
-}
-function over(c, ov) {
-  if (!ov) return c;
-  return [0, 1, 2].map((i) => Math.round(ov[['r', 'g', 'b'][i]] * ov.a + c[i] * (1 - ov.a)));
-}
-
-let _lastChrome = '';
-function syncChrome() {
-  const w = canvas.width, h = canvas.height;
-  if (!w || !h) return;
-  const ov = !state.started ? START_OVERLAY : state.dead ? GAMEOVER_OVERLAY : null;
-  const x = (w / 2) | 0;
-  // readPixels origin is bottom-left: y=h-1 is the screen top, y=0 the bottom.
-  const top = over(sampleScene(x, h - 3), ov);
-  const bot = over(sampleScene(x, 3), ov);
-  // One theme-color tints both bars, so use the midpoint of the two edges.
-  const c = `rgb(${(top[0] + bot[0]) >> 1}, ${(top[1] + bot[1]) >> 1}, ${(top[2] + bot[2]) >> 1})`;
-  if (c !== _lastChrome) {
-    _lastChrome = c;
-    themeMeta?.setAttribute('content', c);
-    document.body.style.background = c;
-  }
-}
+themeMeta?.setAttribute('content', '#cfe8f5');
+document.body.style.background = '#cfe8f5';
 
 const APP_URL = 'https://michaelnorris.com/ski';
 
@@ -638,7 +608,6 @@ function startRun() {
   startEl.classList.remove('show');
   overlay.classList.remove('show');
   document.body.classList.add('playing');
-  syncChrome();
 }
 
 function showStart() {
@@ -647,7 +616,6 @@ function showStart() {
   overlay.classList.remove('show');
   startEl.classList.add('show');
   document.body.classList.remove('playing');
-  syncChrome();
 }
 
 document.getElementById('play').addEventListener('click', startRun);
@@ -774,19 +742,12 @@ resize();
 showStart(); // populate the slope behind the start screen and wait for Play
 
 let last = performance.now();
-let lastChromeAt = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   update(dt);
   render();
   updateHud();
-  // Re-sample the chrome tint a few times a second (readPixels stalls the
-  // pipeline, so we don't do it every frame).
-  if (now - lastChromeAt > 150) {
-    lastChromeAt = now;
-    syncChrome();
-  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
