@@ -7,10 +7,10 @@
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #cfe8f5; }
-      /* --vv-height is the live visible-viewport height (set from JS via the
-         visualViewport API); 100dvh is the pre-JS / non-iOS fallback. JS only
-         sets the drawing buffer; CSS owns the element size. */
-      #app { width: 100vw; height: var(--vv-height, 100dvh); display: block; touch-action: none; }
+      /* Full-bleed scene: the canvas fills the whole screen (behind the status
+         bar and Safari's URL bar) so there's no dead space. Only the UI insets
+         to stay clear of the bars. JS sizes the drawing buffer to match. */
+      #app { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
       #hud {
         position: fixed;
         top: calc(12px + env(safe-area-inset-top));
@@ -20,6 +20,8 @@
         pointer-events: none; user-select: none;
       }
       #hud .big { font-size: 28px; }
+      /* HUD and controls hint only show during play, not on the start/end screens. */
+      body:not(.playing) #hud, body:not(.playing) #help { display: none; }
       #help {
         position: fixed;
         bottom: calc(12px + max(var(--vv-bottom, 0px), env(safe-area-inset-bottom)));
@@ -29,9 +31,11 @@
       }
       /* Game-over overlay — translucent so the wiped-out slope shows through. */
       #gameover {
-        position: fixed; left: 0; right: 0;
-        top: var(--vv-top, 0px); height: var(--vv-height, 100dvh);
-        display: none; align-items: center; justify-content: center;
+        position: fixed; inset: 0; display: none;
+        align-items: center; justify-content: center;
+        /* dim covers the whole screen; padding keeps the panel clear of the bars */
+        padding: calc(12px + env(safe-area-inset-top)) 16px
+                 max(var(--vv-bottom, 0px), env(safe-area-inset-bottom)) 16px;
         background: rgba(24, 48, 64, 0.42);
         backdrop-filter: blur(2px);
         font-family: ui-monospace, Menlo, monospace; color: #fff;
@@ -65,13 +69,14 @@
       }
       /* Start screen — sits over the idle slope. */
       #start {
-        position: fixed; left: 0; right: 0;
-        top: var(--vv-top, 0px); height: var(--vv-height, 100dvh);
-        display: none; align-items: center; justify-content: center;
+        position: fixed; inset: 0; display: none;
+        align-items: center; justify-content: center;
         background: linear-gradient(180deg, rgba(18,42,58,0.55), rgba(18,42,58,0.80));
         backdrop-filter: blur(2px);
         font-family: ui-monospace, Menlo, monospace; color: #fff;
-        z-index: 25; text-align: center; padding: 24px;
+        z-index: 25; text-align: center;
+        padding: calc(24px + env(safe-area-inset-top)) 24px
+                 calc(24px + max(var(--vv-bottom, 0px), env(safe-area-inset-bottom))) 24px;
       }
       #start.show { display: flex; }
       #start .logo { font-size: 48px; font-weight: 800; letter-spacing: 3px; margin-bottom: 4px; }

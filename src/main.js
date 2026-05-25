@@ -536,6 +536,7 @@ const escapeHtml = (s) => s.replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt
 function die() {
   if (state.dead) return;
   state.dead = true;
+  document.body.classList.remove('playing');
   elFinal.textContent = `${Math.floor(state.distance)} m`;
   const c = buildShareImage();
   const dataUrl = c.toDataURL('image/png');
@@ -610,6 +611,7 @@ function startRun() {
   state.started = true;
   startEl.classList.remove('show');
   overlay.classList.remove('show');
+  document.body.classList.add('playing');
 }
 
 function showStart() {
@@ -617,6 +619,7 @@ function showStart() {
   state.started = false;
   overlay.classList.remove('show');
   startEl.classList.add('show');
+  document.body.classList.remove('playing');
 }
 
 document.getElementById('play').addEventListener('click', startRun);
@@ -703,6 +706,11 @@ gui.onChange(saveFeel);
 // Start collapsed — on mobile an open panel covers the screen. Tap the
 // "feel" title bar to expand it.
 gui.close();
+
+// The tuning panel is a dev tool — hide it for players. Reveal on the live
+// site by adding ?tune (or #tune) to the URL.
+const TUNING = import.meta.env.DEV || /[?#&]tune\b/i.test(location.href);
+if (!TUNING) gui.hide();
 
 // ---------------------------------------------------------------------------
 // Loop & resize
