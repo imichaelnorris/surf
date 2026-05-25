@@ -500,7 +500,6 @@ const APP_URL = 'https://michaelnorris.com/ski';
 let shareFile = null;  // PNG File for the native share sheet (mobile)
 let shareBlob = null;  // same image as a Blob (for clipboard image flavor)
 let shareText = '';    // caption with the link
-let shareHtml = '';    // rich HTML: caption + the image inline (data URL)
 
 // Copy the final rendered frame onto a 2D canvas and stamp the score on it.
 function buildShareImage() {
@@ -539,17 +538,7 @@ function die() {
   const c = buildShareImage();
   const dataUrl = c.toDataURL('image/png');
   shotImg.src = dataUrl;
-  const m = Math.floor(state.distance);
-  shareText = `I skied ${m} m! 🎿 Play at ${APP_URL}`;
-  // Caption (with a clickable link) + image inline. Pasting the text/html
-  // flavor into a rich field brings BOTH; we deliberately do NOT add a bare
-  // image/png flavor, which macOS/Messages prefers and pastes alone (dropping
-  // the text). escapeHtml guards the caption; the URL is our own constant.
-  const linkText = APP_URL.replace(/^https?:\/\//, '');
-  shareHtml =
-    `<p style="font:600 15px ui-monospace,Menlo,monospace">` +
-    `I skied ${m} m! 🎿 Play at <a href="${APP_URL}">${linkText}</a></p>` +
-    `<img src="${dataUrl}" alt="ski run" style="max-width:100%;border-radius:8px" />`;
+  shareText = `I skied ${Math.floor(state.distance)} m! 🎿 Play at ${APP_URL}`;
   shareFile = null;
   shareBlob = null;
   c.toBlob((blob) => {
@@ -561,25 +550,17 @@ function die() {
   overlay.classList.add('show');
 }
 
-// Copy the caption + image to the clipboard as one item (multiple flavors) so
-// a single paste drops both into a message. Returns true on success.
+// Copy the caption + link as plain text. (Trying to copy image + text together
+// is unreliable across Mac apps — the receiver grabs the image and drops the
+// text — so we copy the text the user actually wants; the image stays in the
+// overlay to drag or right-click-save.) Returns true on success.
 function copyRunToClipboard() {
-  if (!navigator.clipboard || !window.ClipboardItem) return false;
-  try {
-    // text/html carries the caption + image together; text/plain is the
-    // fallback for plain fields. No bare image/png — it would win and drop text.
-    const item = new ClipboardItem({
-      'text/html': new Blob([shareHtml], { type: 'text/html' }),
-      'text/plain': new Blob([shareText], { type: 'text/plain' }),
-    });
-    navigator.clipboard.write([item]).then(
-      () => toast('Copied image + link! Paste (⌘V) into a message.'),
-      () => downloadRun(),
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  if (!navigator.clipboard || !navigator.clipboard.writeText) return false;
+  navigator.clipboard.writeText(shareText).then(
+    () => toast('Link copied! Paste (⌘V) — drag the image in too.'),
+    () => downloadRun(),
+  );
+  return true;
 }
 
 function downloadRun() {
@@ -654,7 +635,7 @@ function toast(msg) {
       navigator.canShare({ files: [new File(['x'], 'x.png', { type: 'image/png' })] }));
   } catch { /* canShare unsupported */ }
   if (!canFileShare) {
-    btn.textContent = (navigator.clipboard && window.ClipboardItem) ? '⎘ Copy' : '⤓ Save image';
+    btn.textContent = navigator.clipboard?.writeText ? '⎘ Copy link' : '⤓ Save image';
   }
 })();
 addEventListener('keydown', (e) => {
