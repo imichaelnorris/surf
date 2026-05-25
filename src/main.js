@@ -65,7 +65,9 @@ loadFeel(); // apply persisted tuning before the GUI reads CONFIG
 // ---------------------------------------------------------------------------
 
 const canvas = document.getElementById('app');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// preserveDrawingBuffer lets us copy the final frame to a 2D canvas for the
+// shareable end-of-run image.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -164,6 +166,7 @@ const state = {
   heading: 0,      // rad; 0 = straight down the fall line
   speed: 0,        // scalar speed along heading
   airborne: false,
+  started: false,  // false until the player leaves the start screen
   dead: false,     // hit a tree/rock — run is over until replay
   distance: 0,
 };
@@ -222,36 +225,75 @@ function makeRamp() {
 }
 
 const factories = { [TREE]: makeTree, [ROCK]: makeRock, [RAMP]: makeRamp };
-const obstacles = [];
-let lastSpawnZ = 0;
 
-function spawnAhead(targetZ) {
-  while (lastSpawnZ < targetZ) {
-    const step = 1 / Math.max(0.01, CONFIG.spawnDensity);
-    lastSpawnZ += step;
-    const r = Math.random();
+// Infinite obstacle field. The world is divided into square grid cells; each
+// cell is populated deterministically from its coordinates, so the field
+// exists everywhere the skier goes (no empty void off to the side) and a cell
+// regenerates identically if revisited. Cells far from the skier are recycled.
+const CELL = 22;          // world units per grid cell
+const AHEAD = 9;          // cells generated downhill (~fog distance)
+const BEHIND = 2;         // cells kept uphill
+const SIDE = 6;           // cells generated to each side
+const START_CLEAR = 20;   // obstacle-free radius around the start/reset point
+const cells = new Map();  // "cx,cz" -> obstacle Group[]
+
+// Deterministic 0..1 hash from integer cell coords + an index.
+function cellRng(cx, cz, i) {
+  let h = Math.imul(cx | 0, 73856093) ^ Math.imul(cz | 0, 19349663) ^ Math.imul(i | 0, 83492791);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function populateCell(cx, cz) {
+  const key = cx + ',' + cz;
+  if (cells.has(key)) return;
+  const objs = [];
+  // Obstacles per cell from an areal density derived from the existing knobs,
+  // so spawnDensity / corridorWidth keep meaning the same thing they did.
+  const expected = (CONFIG.spawnDensity / CONFIG.corridorWidth) * CELL * CELL;
+  let count = Math.floor(expected);
+  if (cellRng(cx, cz, 0) < expected - count) count++;
+  for (let i = 0; i < count; i++) {
+    const px = cx * CELL + cellRng(cx, cz, i * 5 + 2) * CELL;
+    const pz = cz * CELL + cellRng(cx, cz, i * 5 + 3) * CELL;
+    // Keep a clear runway around the start point so you never spawn into a rock.
+    if (px * px + pz * pz < START_CLEAR * START_CLEAR) continue;
+    const r = cellRng(cx, cz, i * 5 + 1);
     const type = r < 0.62 ? TREE : r < 0.85 ? ROCK : RAMP;
     const obj = factories[type]();
-    obj.position.set(
-      (Math.random() - 0.5) * CONFIG.corridorWidth,
-      0,
-      lastSpawnZ
-    );
-    const s = type === RAMP ? 1 : CONFIG.treeScale * (0.8 + Math.random() * 0.5);
+    obj.position.set(px, 0, pz);
+    const s = type === RAMP ? 1 : CONFIG.treeScale * (0.8 + cellRng(cx, cz, i * 5 + 4) * 0.5);
     obj.scale.setScalar(s);
     obj.userData.collideRadius = obj.userData.radius * s;
     scene.add(obj);
-    obstacles.push(obj);
+    objs.push(obj);
+  }
+  cells.set(key, objs);
+}
+
+function recycleCell(key) {
+  for (const o of cells.get(key)) scene.remove(o);
+  cells.delete(key);
+}
+
+// Generate the window of cells around the skier and drop the ones outside it.
+function updateField() {
+  const scx = Math.floor(state.x / CELL);
+  const scz = Math.floor(state.z / CELL);
+  for (let cz = scz - BEHIND; cz <= scz + AHEAD; cz++) {
+    for (let cx = scx - SIDE; cx <= scx + SIDE; cx++) populateCell(cx, cz);
+  }
+  for (const key of cells.keys()) {
+    const [cx, cz] = key.split(',').map(Number);
+    if (cz < scz - BEHIND - 1 || cz > scz + AHEAD + 1 || Math.abs(cx - scx) > SIDE + 1) {
+      recycleCell(key);
+    }
   }
 }
 
-function recycleBehind() {
-  for (let i = obstacles.length - 1; i >= 0; i--) {
-    if (obstacles[i].position.z < state.z - 30) {
-      scene.remove(obstacles[i]);
-      obstacles.splice(i, 1);
-    }
-  }
+function clearField() {
+  for (const key of [...cells.keys()]) recycleCell(key);
 }
 
 // ---------------------------------------------------------------------------
@@ -272,7 +314,7 @@ const jumpCodes = ['Space', 'KeyW'];
 const handledCodes = ['ArrowLeft', 'ArrowRight', 'ArrowDown', 'Space', 'KeyA', 'KeyD', 'KeyS', 'KeyW'];
 addEventListener('keydown', (e) => {
   keys.add(e.code);
-  if (jumpCodes.includes(e.code) && !state.airborne && !state.dead) {
+  if (jumpCodes.includes(e.code) && state.started && !state.airborne && !state.dead) {
     state.vy = CONFIG.jumpImpulse;
     state.airborne = true;
   }
@@ -310,7 +352,7 @@ canvas.addEventListener('touchmove', (e) => {
 function endTouch(e) {
   // Quick tap, barely moved → jump.
   const dur = performance.now() - touch.startT;
-  if (touch.active && !touch.moved && dur < 250 && !state.airborne && !state.dead) {
+  if (touch.active && !touch.moved && dur < 250 && state.started && !state.airborne && !state.dead) {
     state.vy = CONFIG.jumpImpulse;
     state.airborne = true;
   }
@@ -326,8 +368,8 @@ canvas.addEventListener('touchcancel', endTouch, { passive: false });
 // ---------------------------------------------------------------------------
 
 function update(dt) {
-  // Dead: run is frozen until the player hits Replay.
-  if (state.dead) return;
+  // Frozen until the run begins (start screen) or after a wipeout (end screen).
+  if (!state.started || state.dead) return;
 
   // Steering: combine keyboard (±1) and touch drag (−1..1) into one axis;
   // authority is reduced in the air.
@@ -373,27 +415,34 @@ function update(dt) {
     }
   }
 
-  // Spawn ahead, retire behind, then test collisions.
-  spawnAhead(state.z + 200);
-  recycleBehind();
+  // Generate/recycle the obstacle field around the skier, then test collisions.
+  updateField();
   if (!state.airborne) checkCollisions();
 
   state.distance = Math.max(state.distance, state.z);
 }
 
 function checkCollisions() {
-  for (const o of obstacles) {
-    const dx = o.position.x - state.x;
-    const dz = o.position.z - state.z;
-    const r = o.userData.collideRadius + 0.6;
-    if (dx * dx + dz * dz < r * r) {
-      if (o.userData.type === RAMP) {
-        state.vy = CONFIG.rampImpulse;
-        state.airborne = true;
-      } else {
-        die();
+  const scx = Math.floor(state.x / CELL);
+  const scz = Math.floor(state.z / CELL);
+  for (let cz = scz - 1; cz <= scz + 1; cz++) {
+    for (let cx = scx - 1; cx <= scx + 1; cx++) {
+      const objs = cells.get(cx + ',' + cz);
+      if (!objs) continue;
+      for (const o of objs) {
+        const dx = o.position.x - state.x;
+        const dz = o.position.z - state.z;
+        const r = o.userData.collideRadius + 0.6;
+        if (dx * dx + dz * dz < r * r) {
+          if (o.userData.type === RAMP) {
+            state.vy = CONFIG.rampImpulse;
+            state.airborne = true;
+          } else {
+            die();
+          }
+          return;
+        }
       }
-      break;
     }
   }
 }
@@ -436,35 +485,109 @@ function updateHud() {
 }
 
 // ---------------------------------------------------------------------------
-// Death & replay
+// Start screen, death & share
 // ---------------------------------------------------------------------------
 
+const startEl = document.getElementById('start');
 const overlay = document.getElementById('gameover');
 const elFinal = document.getElementById('final');
+const shotImg = document.getElementById('shot');
+
+let shareFile = null; // File holding the last-frame + score image, built on death
+
+// Copy the final rendered frame onto a 2D canvas and stamp the score on it.
+function buildShareImage() {
+  render(); // make sure the wiped-out frame is in the drawing buffer
+  const W = canvas.width, H = canvas.height;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(canvas, 0, 0);
+
+  // Legibility gradient along the bottom.
+  const band = Math.round(H * 0.24);
+  const grad = ctx.createLinearGradient(0, H - band, 0, H);
+  grad.addColorStop(0, 'rgba(10,22,30,0)');
+  grad.addColorStop(1, 'rgba(10,22,30,0.7)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, H - band, W, band);
+
+  const pad = Math.round(W * 0.045);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `800 ${Math.round(H * 0.085)}px ui-monospace, Menlo, monospace`;
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(`🎿 ${Math.floor(state.distance)} m`, pad, H - pad - Math.round(H * 0.035));
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.font = `600 ${Math.round(H * 0.032)}px ui-monospace, Menlo, monospace`;
+  ctx.fillText('michaelnorris.com/ski', pad, H - pad);
+
+  return c;
+}
 
 function die() {
   if (state.dead) return;
   state.dead = true;
   elFinal.textContent = `${Math.floor(state.distance)} m`;
+  const c = buildShareImage();
+  shotImg.src = c.toDataURL('image/png');
+  // Pre-build the share File now so the share-button click can call
+  // navigator.share() synchronously (preserves the user-gesture requirement).
+  shareFile = null;
+  c.toBlob((blob) => {
+    if (blob) shareFile = new File([blob], 'ski-run.png', { type: 'image/png' });
+  }, 'image/png');
   overlay.classList.add('show');
 }
 
-function resetGame() {
+function shareRun() {
+  if (!shareFile) return;
+  const text = `I skied ${Math.floor(state.distance)} m! 🎿`;
+  if (navigator.canShare && navigator.canShare({ files: [shareFile] })) {
+    navigator.share({ title: 'surf · ski', text, files: [shareFile] }).catch(() => {});
+    return;
+  }
+  // Desktop / unsupported fallback: download the image.
+  const url = URL.createObjectURL(shareFile);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'ski-run.png';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function resetWorld() {
   Object.assign(state, {
     x: 0, z: 0, y: 0, vy: 0, heading: 0, speed: 0,
     airborne: false, dead: false, distance: 0,
   });
-  for (const o of obstacles) scene.remove(o);
-  obstacles.length = 0;
-  lastSpawnZ = 0;
-  spawnAhead(state.z + 200);
+  clearField();
+  updateField();
   camera.position.set(0, CONFIG.camHeight, -CONFIG.camDistance);
+}
+
+function startRun() {
+  resetWorld();
+  state.started = true;
+  startEl.classList.remove('show');
   overlay.classList.remove('show');
 }
 
-document.getElementById('replay').addEventListener('click', resetGame);
+function showStart() {
+  resetWorld();
+  state.started = false;
+  overlay.classList.remove('show');
+  startEl.classList.add('show');
+}
+
+document.getElementById('play').addEventListener('click', startRun);
+document.getElementById('replay').addEventListener('click', startRun);
+document.getElementById('share').addEventListener('click', shareRun);
 addEventListener('keydown', (e) => {
-  if (state.dead && (e.code === 'Enter' || e.code === 'KeyR')) resetGame();
+  if (!state.started) {
+    if (e.code === 'Enter' || e.code === 'Space') startRun();
+  } else if (state.dead && (e.code === 'Enter' || e.code === 'KeyR')) {
+    startRun();
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -521,13 +644,19 @@ gui.close();
 // ---------------------------------------------------------------------------
 
 function resize() {
-  const w = innerWidth, h = innerHeight;
-  renderer.setSize(w, h);
+  // Measure what CSS (100dvh) actually laid out, not innerHeight — on iOS the two
+  // disagree while the address bar is visible. `false` keeps CSS in charge of the
+  // element size so setSize only touches the drawing buffer.
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  renderer.setSize(w, h, false);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
 }
 addEventListener('resize', resize);
+visualViewport?.addEventListener('resize', resize); // fires as the iOS toolbar slides
 resize();
+
+showStart(); // populate the slope behind the start screen and wait for Play
 
 let last = performance.now();
 function frame(now) {

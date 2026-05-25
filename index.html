@@ -2,21 +2,27 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>surf — ski prototype</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { width: 100%; height: 100%; overflow: hidden; background: #cfe8f5; }
-      #app { width: 100vw; height: 100vh; display: block; touch-action: none; }
+      /* dvh tracks the *visible* viewport, so the canvas never runs behind the
+         iOS toolbar. JS only sets the drawing buffer; CSS owns the element size. */
+      #app { width: 100vw; height: 100dvh; display: block; touch-action: none; }
       #hud {
-        position: fixed; top: 12px; left: 12px;
+        position: fixed;
+        top: calc(12px + env(safe-area-inset-top));
+        left: calc(12px + env(safe-area-inset-left));
         font: 600 14px/1.4 ui-monospace, Menlo, monospace;
         color: #1b3a4b; text-shadow: 0 1px 0 rgba(255,255,255,0.5);
         pointer-events: none; user-select: none;
       }
       #hud .big { font-size: 28px; }
       #help {
-        position: fixed; bottom: 12px; left: 12px;
+        position: fixed;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        left: calc(12px + env(safe-area-inset-left));
         font: 500 12px/1.5 ui-monospace, Menlo, monospace;
         color: #2b5263; opacity: 0.8; pointer-events: none; user-select: none;
       }
@@ -46,6 +52,36 @@
       #gameover button:hover { transform: scale(1.05); }
       #gameover button:active { transform: scale(0.97); }
       #gameover .hint { margin-top: 14px; font-size: 12px; opacity: 0.7; }
+      #gameover .shot {
+        display: block; width: min(72vw, 280px); border-radius: 10px;
+        margin: 4px auto 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      }
+      #gameover .btns { display: flex; gap: 12px; justify-content: center; }
+      #gameover .ghost {
+        background: transparent; color: #fff;
+        box-shadow: inset 0 0 0 2px rgba(255,255,255,0.6);
+      }
+      /* Start screen — sits over the idle slope. */
+      #start {
+        position: fixed; inset: 0; display: none;
+        align-items: center; justify-content: center;
+        background: linear-gradient(180deg, rgba(18,42,58,0.55), rgba(18,42,58,0.80));
+        backdrop-filter: blur(2px);
+        font-family: ui-monospace, Menlo, monospace; color: #fff;
+        z-index: 25; text-align: center; padding: 24px;
+      }
+      #start.show { display: flex; }
+      #start .logo { font-size: 48px; font-weight: 800; letter-spacing: 3px; margin-bottom: 4px; }
+      #start .tag { font-size: 15px; opacity: 0.9; margin-bottom: 24px; }
+      #start .controls { font-size: 12px; line-height: 1.9; opacity: 0.8; margin-top: 18px; }
+      #start button {
+        font: 700 20px ui-monospace, Menlo, monospace;
+        color: #0e2230; background: #fff; border: none;
+        padding: 16px 44px; border-radius: 999px; cursor: pointer;
+        transition: transform 0.08s ease;
+      }
+      #start button:hover { transform: scale(1.05); }
+      #start button:active { transform: scale(0.97); }
     </style>
   </head>
   <body>
@@ -59,9 +95,24 @@
     <div id="gameover">
       <div class="panel">
         <div class="title">💥 Wiped out</div>
+        <img id="shot" class="shot" alt="your run" />
         <div class="score" id="final">0 m</div>
-        <button id="replay">↻ Replay</button>
-        <div class="hint">press Enter / R</div>
+        <div class="btns">
+          <button id="share">⤴ Share</button>
+          <button id="replay" class="ghost">↻ Replay</button>
+        </div>
+        <div class="hint">press Enter / R to replay</div>
+      </div>
+    </div>
+    <div id="start">
+      <div class="panel">
+        <div class="logo">🎿 SKI</div>
+        <div class="tag">how far down the mountain can you get?</div>
+        <button id="play">▶ Play</button>
+        <div class="controls">
+          ← → / A D&nbsp;&nbsp;steer&nbsp;&nbsp;·&nbsp;&nbsp;↓ / S&nbsp;&nbsp;brake&nbsp;&nbsp;·&nbsp;&nbsp;Space / W&nbsp;&nbsp;jump<br />
+          mobile: drag to steer · drag down to brake · tap to jump
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>
